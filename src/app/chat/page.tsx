@@ -52,6 +52,28 @@ export default function ChatPage() {
     setSelectedConversationId(conversation.id);
   };
 
+  const handleDeleteConversation = async (conversationId: string) => {
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}/delete`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete conversation');
+      }
+
+      // Remove conversation from state
+      setConversations(prev => prev.filter(c => c.id !== conversationId));
+      
+      // If the deleted conversation was selected, clear the selection
+      if (selectedConversationId === conversationId) {
+        setSelectedConversationId(null);
+      }
+    } catch (error) {
+      console.error('Failed to delete conversation:', error);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!inputMessage.trim() || isLoading) return;
     setIsLoading(true);
@@ -107,7 +129,7 @@ export default function ChatPage() {
         if (conversationIndex === -1) {
           // Create new conversation
           updatedConversations.unshift({
-            id: selectedConversationId || 'temp',
+            id: selectedConversationId || `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`,
             title: inputMessage.slice(0, 50) + (inputMessage.length > 50 ? '...' : ''),
             messages: [newUserMessage, newAssistantMessage],
           });
@@ -121,44 +143,70 @@ export default function ChatPage() {
         return updatedConversations;
       });
 
+      let streamedContent = '';
+
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
         const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        const lines = chunk.split('\n\n');
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(5).trim();
-            if (data === '[DONE]') continue;
+          const trimmedLine = line.trim();
+          if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue;
+          
+          const data = trimmedLine.slice(5).trim();
+          if (data === '[DONE]') continue;
 
-            try {
-              const parsedData = JSON.parse(data);
-              if (parsedData.content) {
-                setConversations(prev => {
-                  const updatedConversations = [...prev];
-                  const conversationIndex = updatedConversations.findIndex(c => c.id === (parsedData.conversationId || selectedConversationId));
+          try {
+            const parsedData = JSON.parse(data);
+            
+            if (parsedData.content) {
+              // Accumulate the streamed content
+              streamedContent += parsedData.content;
+
+              setConversations(prev => {
+                const updatedConversations = [...prev];
+                const conversationIndex = updatedConversations.findIndex(c => 
+                  c.id === parsedData.conversationId || 
+                  (c.id.startsWith('temp-') && !parsedData.conversationId)
+                );
+                
+                if (conversationIndex !== -1) {
+                  const conversation = updatedConversations[conversationIndex];
+                  const lastMessage = conversation.messages[conversation.messages.length - 1];
                   
-                  if (conversationIndex !== -1) {
-                    const conversation = updatedConversations[conversationIndex];
-                    const lastMessage = conversation.messages[conversation.messages.length - 1];
-                    
-                    if (lastMessage && lastMessage.role === 'assistant') {
-                      lastMessage.content += parsedData.content;
-                    }
+                  if (lastMessage && lastMessage.role === 'assistant') {
+                    // Update with the accumulated content
+                    lastMessage.content = streamedContent;
                   }
-                  
-                  return updatedConversations;
-                });
-              }
-              
-              if (parsedData.conversationId && !selectedConversationId) {
-                setSelectedConversationId(parsedData.conversationId);
-              }
-            } catch (e) {
-              console.error('Error parsing SSE data:', e);
+                }
+                
+                return updatedConversations;
+              });
             }
+            
+            if (parsedData.conversationId && !selectedConversationId) {
+              // Update the temporary conversation with the real ID
+              setConversations(prev => {
+                const updatedConversations = [...prev];
+                const tempIndex = updatedConversations.findIndex(c => c.id.startsWith('temp-'));
+                
+                if (tempIndex !== -1) {
+                  updatedConversations[tempIndex] = {
+                    ...updatedConversations[tempIndex],
+                    id: parsedData.conversationId
+                  };
+                }
+                
+                return updatedConversations;
+              });
+              
+              setSelectedConversationId(parsedData.conversationId);
+            }
+          } catch (e) {
+            console.error('Error parsing SSE data:', e);
           }
         }
       }
@@ -181,6 +229,7 @@ export default function ChatPage() {
         conversations={conversations}
         selectedConversationId={selectedConversationId}
         onSelectConversation={handleSelectConversation}
+        onDeleteConversation={handleDeleteConversation}
       />
       <div className="flex-1 flex flex-col bg-gray-50">
         <div className="flex-1 overflow-y-auto">

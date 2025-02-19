@@ -70,11 +70,12 @@ export async function POST(request: Request) {
     ];
 
     const stream = await openai.chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-4o-mini',
       messages: messages,
       temperature: 0.7,
       max_tokens: 500,
       stream: true,
+      n: 1
     });
 
     // Create assistant message in database
@@ -90,14 +91,22 @@ export async function POST(request: Request) {
 
     // Create a new stream for the response
     const textEncoder = new TextEncoder();
+
     const readableStream = new ReadableStream({
       async start(controller) {
         try {
           for await (const chunk of stream) {
             const content = chunk.choices[0]?.delta?.content || '';
-            if (content) {
+            if (content) { 
               fullAssistantResponse += content;
-              controller.enqueue(textEncoder.encode(`data: ${JSON.stringify({ content, conversationId: conversation.id })}\n\n`));
+
+              const eventData = {
+                content: content,
+                conversationId: conversation.id
+              };
+              const event = `data: ${JSON.stringify(eventData)}\n\n`;
+              console.log(event);
+              controller.enqueue(textEncoder.encode(event));
             }
           }
 
