@@ -1,9 +1,10 @@
-import { IconSearch, IconMicrophone, IconSend, IconPlus, IconLoader2 } from '@tabler/icons-react';
+import { IconSearch, IconSend, IconPlus, IconLoader2 } from '@tabler/icons-react';
+import { AudioRecorder } from './AudioRecorder';
 
 interface ChatInputProps {
   value: string;
   onChange: (value: string) => void;
-  onSubmit: () => void;
+  onSubmit: (isAudio?: boolean) => void;
   isLoading?: boolean;
 }
 
@@ -18,6 +19,11 @@ export function ChatInput({ value, onChange, onSubmit, isLoading }: ChatInputPro
       e.preventDefault();
       onSubmit();
     }
+  };
+
+  const handleTranscriptionComplete = (transcription: string) => {
+    onChange(transcription);
+    onSubmit(true);
   };
 
   return (
@@ -45,13 +51,10 @@ export function ChatInput({ value, onChange, onSubmit, isLoading }: ChatInputPro
           </div>
           
           <div className="flex items-center space-x-1">
-            <button
-              type="button"
-              className="p-2 text-gray-500 hover:text-gray-700 rounded-xl hover:bg-gray-100 transition-colors"
-              title="Voice input"
-            >
-              <IconMicrophone size={20} />
-            </button>
+            <AudioRecorder
+              onTranscriptionComplete={handleTranscriptionComplete}
+              isLoading={isLoading}
+            />
             <button
               type="button"
               className="p-2 text-gray-500 hover:text-gray-700 rounded-xl hover:bg-gray-100 transition-colors"

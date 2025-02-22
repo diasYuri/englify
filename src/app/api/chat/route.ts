@@ -1,35 +1,34 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
-import { PrismaClient } from '@prisma/client';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import OpenAI from 'openai';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const openai = new OpenAI();
 
-const systemPrompt = `You are a helpful English teacher. Your goal is to help users improve their English skills.
-When they send a message in their native language or English, you should:
-1. If the message is in English, correct any mistakes and explain them
-2. If the message is not in English, provide the English translation and explain key phrases
-3. Always be encouraging and supportive
-4. Provide examples when relevant
-5. Keep explanations clear and concise`;
+const systemPrompt = `You are Englify, an AI English tutor. Your responses should be clear, helpful, and focused on improving the user's English skills. When responding to audio messages, make sure to:
+1. Correct any pronunciation or grammar mistakes in a friendly way
+2. Provide alternative ways to express the same idea
+3. Keep responses concise and easy to understand, as they will be converted to speech
+4. Use natural, conversational English suitable for audio playback`;
 
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!session?.user?.email) {
+      return new NextResponse(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401 }
+      );
     }
 
-    const { message, chatHistory, conversationId } = await request.json();
+    const { message, chatHistory, conversationId, isAudio } = await request.json();
 
     if (!message) {
-      return NextResponse.json(
-        { error: 'Message is required' },
+      return new NextResponse(
+        JSON.stringify({ error: 'Message is required' }),
         { status: 400 }
       );
     }
@@ -39,39 +38,61 @@ export async function POST(request: Request) {
     if (conversationId) {
       conversation = await prisma.conversation.findUnique({
         where: { id: conversationId },
+        include: { user: true }
       });
 
-      if (!conversation || conversation.userId !== session.user.id) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      if (!conversation || conversation.user.email !== session.user.email) {
+        return new NextResponse(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401 }
+        );
       }
     } else {
+      const user = await prisma.user.findUnique({
+        where: { email: session.user.email }
+      });
+
+      if (!user) {
+        return new NextResponse(
+          JSON.stringify({ error: 'User not found' }),
+          { status: 404 }
+        );
+      }
+
       conversation = await prisma.conversation.create({
         data: {
           title: message.slice(0, 50) + (message.length > 50 ? '...' : ''),
-          userId: session.user.id,
+          userId: user.id,
         },
       });
     }
 
     // Save user message
-    const userMessage = await prisma.message.create({
+    await prisma.message.create({
       data: {
         content: message,
         role: 'user',
         conversationId: conversation.id,
+        isAudio: isAudio || false,
       },
     });
 
     // Format chat history for OpenAI
     const messages = [
       { role: 'system', content: systemPrompt },
-      ...chatHistory,
-      { role: 'user', content: message }
+      ...chatHistory.map((msg: { role: string; content: string; isAudio?: boolean }) => ({
+        role: msg.role,
+        content: msg.content + (msg.isAudio ? ' [This was an audio message]' : ''),
+      })),
+      { 
+        role: 'user', 
+        content: message + (isAudio ? ' [This is an audio message, provide a response suitable for audio playback]' : '')
+      }
     ];
 
     const stream = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: messages,
+      model: 'gpt-4',
+      messages,
       temperature: 0.7,
       max_tokens: 500,
       stream: true,
@@ -84,6 +105,7 @@ export async function POST(request: Request) {
         content: '',
         role: 'assistant',
         conversationId: conversation.id,
+        isResponseToAudio: isAudio || false,
       },
     });
 
@@ -102,10 +124,10 @@ export async function POST(request: Request) {
 
               const eventData = {
                 content: content,
-                conversationId: conversation.id
+                conversationId: conversation.id,
+                isResponseToAudio: isAudio || false,
               };
               const event = `data: ${JSON.stringify(eventData)}\n\n`;
-              console.log(event);
               controller.enqueue(textEncoder.encode(event));
             }
           }
@@ -113,7 +135,10 @@ export async function POST(request: Request) {
           // Update the assistant message with the complete response
           await prisma.message.update({
             where: { id: assistantMessage.id },
-            data: { content: fullAssistantResponse },
+            data: { 
+              content: fullAssistantResponse,
+              isResponseToAudio: isAudio || false,
+            },
           });
 
           // Update conversation title if this is the first message
@@ -147,11 +172,11 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Chat API error:', error);
-    return NextResponse.json(
-      { error: 'Failed to get response' },
+    return new NextResponse(
+      JSON.stringify({ error: 'Failed to get response' }),
       { status: 500 }
     );
   } finally {
     await prisma.$disconnect();
   }
-}
+} 

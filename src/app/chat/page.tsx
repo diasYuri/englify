@@ -5,14 +5,18 @@ import { Sidebar } from '../components/Sidebar';
 import { MessageList } from '../components/MessageList';
 import { ChatInput } from '../components/ChatInput';
 
+interface Message {
+  id: string;
+  content: string;
+  role: 'user' | 'assistant';
+  isAudio?: boolean;
+  isResponseToAudio?: boolean;
+}
+
 interface Conversation {
   id: string;
   title: string;
-  messages: Array<{
-    id: string;
-    content: string;
-    role: 'user' | 'assistant';
-  }>;
+  messages: Message[];
 }
 
 export default function ChatPage() {
@@ -74,7 +78,7 @@ export default function ChatPage() {
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (isAudio?: boolean) => {
     if (!inputMessage.trim() || isLoading) return;
     setIsLoading(true);
 
@@ -83,6 +87,46 @@ export default function ChatPage() {
         ? conversations.find((c) => c.id === selectedConversationId)
         : null;
 
+      const tempMessageId = `temp-${Date.now()}`;
+      const tempAssistantId = `temp-${Date.now() + 1}`;
+
+      // Add messages to UI immediately
+      const newUserMessage = {
+        id: tempMessageId,
+        content: inputMessage,
+        role: 'user' as const,
+        isAudio,
+      };
+
+      const newAssistantMessage = {
+        id: tempAssistantId,
+        content: '',
+        role: 'assistant' as const,
+        isResponseToAudio: isAudio,
+      };
+
+      // Update conversations state with new messages
+      setConversations(prev => {
+        const updatedConversations = [...prev];
+        const conversationIndex = updatedConversations.findIndex(c => c.id === selectedConversationId);
+        
+        if (conversationIndex === -1) {
+          const tempConvId = `temp-${Date.now()}`;
+          updatedConversations.unshift({
+            id: tempConvId,
+            title: inputMessage.slice(0, 50) + (inputMessage.length > 50 ? '...' : ''),
+            messages: [newUserMessage, newAssistantMessage],
+          });
+        } else {
+          updatedConversations[conversationIndex] = {
+            ...updatedConversations[conversationIndex],
+            messages: [...updatedConversations[conversationIndex].messages, newUserMessage, newAssistantMessage],
+          };
+        }
+        return updatedConversations;
+      });
+
+      // Send request to API
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -91,9 +135,11 @@ export default function ChatPage() {
         body: JSON.stringify({
           message: inputMessage,
           conversationId: selectedConversationId,
+          isAudio,
           chatHistory: currentConversation?.messages.map((msg) => ({
             role: msg.role,
             content: msg.content,
+            isAudio: msg.isAudio,
           })) || [],
         }),
       });
@@ -108,41 +154,6 @@ export default function ChatPage() {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-
-      // Add user message immediately
-      const newUserMessage = {
-        id: Date.now().toString(),
-        content: inputMessage,
-        role: 'user' as const,
-      };
-
-      const newAssistantMessage = {
-        id: (Date.now() + 1).toString(),
-        content: '',
-        role: 'assistant' as const,
-      };
-
-      setConversations(prev => {
-        const updatedConversations = [...prev];
-        const conversationIndex = updatedConversations.findIndex(c => c.id === selectedConversationId);
-        
-        if (conversationIndex === -1) {
-          // Create new conversation
-          updatedConversations.unshift({
-            id: selectedConversationId || `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-            title: inputMessage.slice(0, 50) + (inputMessage.length > 50 ? '...' : ''),
-            messages: [newUserMessage, newAssistantMessage],
-          });
-        } else {
-          // Update existing conversation
-          updatedConversations[conversationIndex] = {
-            ...updatedConversations[conversationIndex],
-            messages: [...updatedConversations[conversationIndex].messages, newUserMessage, newAssistantMessage],
-          };
-        }
-        return updatedConversations;
-      });
-
       let streamedContent = '';
 
       while (true) {
@@ -163,14 +174,13 @@ export default function ChatPage() {
             const parsedData = JSON.parse(data);
             
             if (parsedData.content) {
-              // Accumulate the streamed content
               streamedContent += parsedData.content;
 
               setConversations(prev => {
                 const updatedConversations = [...prev];
                 const conversationIndex = updatedConversations.findIndex(c => 
                   c.id === parsedData.conversationId || 
-                  (c.id.startsWith('temp-') && !parsedData.conversationId)
+                  c.id.startsWith('temp-')
                 );
                 
                 if (conversationIndex !== -1) {
@@ -178,8 +188,8 @@ export default function ChatPage() {
                   const lastMessage = conversation.messages[conversation.messages.length - 1];
                   
                   if (lastMessage && lastMessage.role === 'assistant') {
-                    // Update with the accumulated content
                     lastMessage.content = streamedContent;
+                    lastMessage.isResponseToAudio = isAudio;
                   }
                 }
                 
@@ -188,7 +198,6 @@ export default function ChatPage() {
             }
             
             if (parsedData.conversationId && !selectedConversationId) {
-              // Update the temporary conversation with the real ID
               setConversations(prev => {
                 const updatedConversations = [...prev];
                 const tempIndex = updatedConversations.findIndex(c => c.id.startsWith('temp-'));
@@ -196,7 +205,7 @@ export default function ChatPage() {
                 if (tempIndex !== -1) {
                   updatedConversations[tempIndex] = {
                     ...updatedConversations[tempIndex],
-                    id: parsedData.conversationId
+                    id: parsedData.conversationId,
                   };
                 }
                 
@@ -240,6 +249,8 @@ export default function ChatPage() {
                     id: msg.id,
                     content: msg.content,
                     sender: msg.role,
+                    isAudio: msg.isAudio,
+                    isResponseToAudio: msg.isResponseToAudio,
                   }))
                 : []
             }

@@ -5,6 +5,8 @@ interface Message {
   id: string;
   content: string;
   sender: 'user' | 'assistant';
+  isAudio?: boolean;
+  isResponseToAudio?: boolean;
 }
 
 interface MessageListProps {
@@ -31,6 +33,8 @@ export function MessageList({ messages }: MessageListProps) {
           key={message.id}
           content={message.content}
           isUser={message.sender === 'user'}
+          isAudio={message.isAudio}
+          isResponseToAudio={message.isResponseToAudio}
         />
       ))}
     </div>

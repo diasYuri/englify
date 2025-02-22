@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
 import { IconRobot, IconUser } from '@tabler/icons-react';
+import { AudioMessage } from './AudioMessage';
+import { AudioPlayer } from './AudioPlayer';
 
 interface ChatMessageProps {
   content: string;
   isUser: boolean;
+  isAudio?: boolean;
+  isResponseToAudio?: boolean;
 }
 
 const TypingIndicator = () => (
@@ -14,7 +18,7 @@ const TypingIndicator = () => (
   </div>
 );
 
-export function ChatMessage({ content, isUser }: ChatMessageProps) {
+export function ChatMessage({ content, isUser, isAudio, isResponseToAudio }: ChatMessageProps) {
   const [isTyping, setIsTyping] = useState(!isUser && content === '');
   const [displayContent, setDisplayContent] = useState(content);
 
@@ -40,8 +44,24 @@ export function ChatMessage({ content, isUser }: ChatMessageProps) {
       <div
         className={`relative flex-1 max-w-2xl rounded-2xl px-4 py-3 ${isUser ? 'bg-primary-500 text-white' : 'bg-gray-100 text-gray-800'}`}
       >
-        {isTyping ? <TypingIndicator /> : (
-          <div className="whitespace-pre-wrap">{displayContent}</div>
+        {isTyping ? (
+          <TypingIndicator />
+        ) : (
+          <div className="space-y-2">
+            {isAudio ? (
+              <AudioMessage transcription={displayContent} />
+            ) : (
+              <>
+                <div className="whitespace-pre-wrap">{displayContent}</div>
+                {isResponseToAudio && (
+                  <div className="mt-2 flex items-center space-x-2">
+                    <AudioPlayer text={displayContent} />
+                    <span className="text-xs text-gray-500">Listen to response</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         )}
       </div>
     </div>
