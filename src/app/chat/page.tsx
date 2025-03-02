@@ -95,14 +95,14 @@ export default function ChatPage() {
         id: tempMessageId,
         content: inputMessage,
         role: 'user' as const,
-        isAudio,
+        isAudio: isAudio === true,
       };
 
       const newAssistantMessage = {
         id: tempAssistantId,
         content: '',
         role: 'assistant' as const,
-        isResponseToAudio: isAudio,
+        isResponseToAudio: isAudio === true,
       };
 
       // Update conversations state with new messages
@@ -189,7 +189,7 @@ export default function ChatPage() {
                   
                   if (lastMessage && lastMessage.role === 'assistant') {
                     lastMessage.content = streamedContent;
-                    lastMessage.isResponseToAudio = isAudio;
+                    lastMessage.isResponseToAudio = isAudio === true;
                   }
                 }
                 

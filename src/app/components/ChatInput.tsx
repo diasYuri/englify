@@ -11,13 +11,13 @@ interface ChatInputProps {
 export function ChatInput({ value, onChange, onSubmit, isLoading }: ChatInputProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(true);
+    onSubmit(false);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      onSubmit(true);
+      onSubmit(false);
     }
   };
 

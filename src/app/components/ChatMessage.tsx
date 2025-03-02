@@ -47,7 +47,7 @@ export function ChatMessage({ content, isUser, isAudio }: ChatMessageProps) {
           <TypingIndicator />
         ) : (
           <div className="space-y-2">
-            {isAudio ? (
+            {isUser && isAudio ? (
               <AudioMessage transcription={displayContent} />
             ) : (
               <>
