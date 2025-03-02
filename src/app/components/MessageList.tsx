@@ -34,7 +34,6 @@ export function MessageList({ messages }: MessageListProps) {
           content={message.content}
           isUser={message.sender === 'user'}
           isAudio={message.isAudio}
-          isResponseToAudio={message.isResponseToAudio}
         />
       ))}
     </div>

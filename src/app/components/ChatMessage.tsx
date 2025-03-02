@@ -7,7 +7,6 @@ interface ChatMessageProps {
   content: string;
   isUser: boolean;
   isAudio?: boolean;
-  isResponseToAudio?: boolean;
 }
 
 const TypingIndicator = () => (
@@ -18,7 +17,7 @@ const TypingIndicator = () => (
   </div>
 );
 
-export function ChatMessage({ content, isUser, isAudio, isResponseToAudio }: ChatMessageProps) {
+export function ChatMessage({ content, isUser, isAudio }: ChatMessageProps) {
   const [isTyping, setIsTyping] = useState(!isUser && content === '');
   const [displayContent, setDisplayContent] = useState(content);
 
@@ -53,7 +52,7 @@ export function ChatMessage({ content, isUser, isAudio, isResponseToAudio }: Cha
             ) : (
               <>
                 <div className="whitespace-pre-wrap">{displayContent}</div>
-                {isResponseToAudio && (
+                {!isUser && displayContent && (
                   <div className="mt-2 flex items-center space-x-2">
                     <AudioPlayer text={displayContent} />
                     <span className="text-xs text-gray-500">Listen to response</span>

@@ -7,11 +7,14 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 const openai = new OpenAI();
 
-const systemPrompt = `You are Englify, an AI English tutor. Your responses should be clear, helpful, and focused on improving the user's English skills. When responding to audio messages, make sure to:
+const systemPrompt = `You are Englify, an AI English tutor. Your responses should be clear, helpful, and focused on improving the user's English skills. All your responses will be delivered in both text and audio formats to enhance the learning experience.
+
+When responding:
 1. Correct any pronunciation or grammar mistakes in a friendly way
 2. Provide alternative ways to express the same idea
 3. Keep responses concise and easy to understand, as they will be converted to speech
-4. Use natural, conversational English suitable for audio playback`;
+4. Use natural, conversational English suitable for audio playback
+5. Highlight key vocabulary or phrases that would be useful for the student`;
 
 export async function POST(request: Request) {
   try {
@@ -105,7 +108,7 @@ export async function POST(request: Request) {
         content: '',
         role: 'assistant',
         conversationId: conversation.id,
-        isResponseToAudio: isAudio || false,
+        isResponseToAudio: true,
       },
     });
 
@@ -125,7 +128,7 @@ export async function POST(request: Request) {
               const eventData = {
                 content: content,
                 conversationId: conversation.id,
-                isResponseToAudio: isAudio || false,
+                isResponseToAudio: true,
               };
               const event = `data: ${JSON.stringify(eventData)}\n\n`;
               controller.enqueue(textEncoder.encode(event));
@@ -137,7 +140,7 @@ export async function POST(request: Request) {
             where: { id: assistantMessage.id },
             data: { 
               content: fullAssistantResponse,
-              isResponseToAudio: isAudio || false,
+              isResponseToAudio: true,
             },
           });
 

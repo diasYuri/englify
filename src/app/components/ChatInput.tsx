@@ -11,13 +11,13 @@ interface ChatInputProps {
 export function ChatInput({ value, onChange, onSubmit, isLoading }: ChatInputProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit();
+    onSubmit(true);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      onSubmit();
+      onSubmit(true);
     }
   };
 
@@ -53,7 +53,7 @@ export function ChatInput({ value, onChange, onSubmit, isLoading }: ChatInputPro
           <div className="flex items-center space-x-1">
             <AudioRecorder
               onTranscriptionComplete={handleTranscriptionComplete}
-              isLoading={isLoading}
+              isLoading={!!isLoading}
             />
             <button
               type="button"
