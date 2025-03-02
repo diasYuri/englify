@@ -7,6 +7,7 @@ interface ChatMessageProps {
   content: string;
   isUser: boolean;
   isAudio?: boolean;
+  isComplete?: boolean;
 }
 
 const TypingIndicator = () => (
@@ -17,19 +18,25 @@ const TypingIndicator = () => (
   </div>
 );
 
-export function ChatMessage({ content, isUser, isAudio }: ChatMessageProps) {
+export function ChatMessage({ content, isUser, isAudio, isComplete }: ChatMessageProps) {
   const [isTyping, setIsTyping] = useState(!isUser && content === '');
   const [displayContent, setDisplayContent] = useState(content);
+  const [shouldAutoPlay, setShouldAutoPlay] = useState(false);
 
   useEffect(() => {
     if (!isUser) {
       setIsTyping(content === '');
       setDisplayContent(content);
+      
+      // Only auto-play when message is complete and not empty
+      if (isComplete && content !== '') {
+        setShouldAutoPlay(true);
+      }
     } else {
       setDisplayContent(content);
       setIsTyping(false);
     }
-  }, [content, isUser]);
+  }, [content, isUser, isComplete]);
 
   return (
     <div className={`flex items-start space-x-3 ${isUser ? 'flex-row-reverse space-x-reverse' : ''}`}>
@@ -54,8 +61,13 @@ export function ChatMessage({ content, isUser, isAudio }: ChatMessageProps) {
                 <div className="whitespace-pre-wrap">{displayContent}</div>
                 {!isUser && displayContent && (
                   <div className="mt-2 flex items-center space-x-2">
-                    <AudioPlayer text={displayContent} />
-                    <span className="text-xs text-gray-500">Listen to response</span>
+                    <AudioPlayer 
+                      text={displayContent} 
+                      autoPlay={shouldAutoPlay}
+                    />
+                    <span className="text-xs text-gray-500">
+                      {shouldAutoPlay ? 'Playing response...' : 'Listen to response'}
+                    </span>
                   </div>
                 )}
               </>

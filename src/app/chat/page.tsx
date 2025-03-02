@@ -11,6 +11,7 @@ interface Message {
   role: 'user' | 'assistant';
   isAudio?: boolean;
   isResponseToAudio?: boolean;
+  isComplete?: boolean;
 }
 
 interface Conversation {
@@ -219,6 +220,26 @@ export default function ChatPage() {
           }
         }
       }
+
+      // After streaming is complete, mark the message as complete
+      setConversations(prev => {
+        const updatedConversations = [...prev];
+        const conversationIndex = updatedConversations.findIndex(c => 
+          c.id === selectedConversationId || 
+          (selectedConversationId === null && c.id.startsWith('temp-'))
+        );
+        
+        if (conversationIndex !== -1) {
+          const conversation = updatedConversations[conversationIndex];
+          const lastMessage = conversation.messages[conversation.messages.length - 1];
+          
+          if (lastMessage && lastMessage.role === 'assistant') {
+            lastMessage.isComplete = true;
+          }
+        }
+        
+        return updatedConversations;
+      });
     } catch (error) {
       console.error('Chat error:', error);
     } finally {
@@ -251,6 +272,7 @@ export default function ChatPage() {
                     sender: msg.role,
                     isAudio: msg.isAudio,
                     isResponseToAudio: msg.isResponseToAudio,
+                    isComplete: msg.isComplete,
                   }))
                 : []
             }

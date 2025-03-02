@@ -7,6 +7,7 @@ interface Message {
   sender: 'user' | 'assistant';
   isAudio?: boolean;
   isResponseToAudio?: boolean;
+  isComplete?: boolean;
 }
 
 interface MessageListProps {
@@ -34,6 +35,7 @@ export function MessageList({ messages }: MessageListProps) {
           content={message.content}
           isUser={message.sender === 'user'}
           isAudio={message.isAudio}
+          isComplete={message.isComplete}
         />
       ))}
     </div>

@@ -5,28 +5,17 @@ import { IconPlayerPlay, IconPlayerPause, IconLoader2 } from '@tabler/icons-reac
 
 interface AudioPlayerProps {
   text: string;
+  autoPlay?: boolean;
 }
 
-export function AudioPlayer({ text }: AudioPlayerProps) {
+export function AudioPlayer({ text, autoPlay = false }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const hasTriggeredAutoplay = useRef(false);
 
-  const handlePlay = async () => {
-    if (audioUrl) {
-      if (audioRef.current) {
-        if (isPlaying) {
-          audioRef.current.pause();
-          setIsPlaying(false);
-        } else {
-          await audioRef.current.play();
-          setIsPlaying(true);
-        }
-      }
-      return;
-    }
-
+  const generateAndPlayAudio = async () => {
     setIsLoading(true);
     try {
       const response = await fetch('/api/text-to-speech', {
@@ -61,6 +50,31 @@ export function AudioPlayer({ text }: AudioPlayerProps) {
       setIsLoading(false);
     }
   };
+
+  const handlePlay = async () => {
+    if (audioUrl) {
+      if (audioRef.current) {
+        if (isPlaying) {
+          audioRef.current.pause();
+          setIsPlaying(false);
+        } else {
+          await audioRef.current.play();
+          setIsPlaying(true);
+        }
+      }
+      return;
+    }
+
+    await generateAndPlayAudio();
+  };
+
+  // Effect for auto-play
+  useEffect(() => {
+    if (autoPlay && text && !audioUrl && !hasTriggeredAutoplay.current) {
+      hasTriggeredAutoplay.current = true;
+      generateAndPlayAudio();
+    }
+  }, [autoPlay, text, audioUrl]);
 
   // Cleanup URL on unmount
   useEffect(() => {
