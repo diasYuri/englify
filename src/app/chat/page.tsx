@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Sidebar } from '../components/Sidebar';
 import { MessageList } from '../components/MessageList';
 import { ChatInput } from '../components/ChatInput';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 
 interface Message {
   id: string;
@@ -21,16 +23,27 @@ interface Conversation {
 }
 
 export default function ChatPage() {
+  const router = useRouter();
+  const { status } = useSession();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Check authentication and redirect if not logged in
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/');
+    }
+  }, [status, router]);
+
   // Load conversations on mount
   useEffect(() => {
-    loadConversations();
-  }, []);
+    if (status === 'authenticated') {
+      loadConversations();
+    }
+  }, [status]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -84,14 +97,20 @@ export default function ChatPage() {
     setIsLoading(true);
 
     try {
+      // Get current conversation if one is selected
       const currentConversation = selectedConversationId
         ? conversations.find((c) => c.id === selectedConversationId)
         : null;
-
+      
+      // Generate temporary IDs for optimistic UI updates
       const tempMessageId = `temp-${Date.now()}`;
       const tempAssistantId = `temp-${Date.now() + 1}`;
+      const tempConvId = selectedConversationId || `temp-${Date.now() + 2}`;
+      
+      // Track received conversation ID during streaming
+      let receivedConversationId = selectedConversationId;
 
-      // Add messages to UI immediately
+      // Create message objects
       const newUserMessage = {
         id: tempMessageId,
         content: inputMessage,
@@ -109,21 +128,31 @@ export default function ChatPage() {
       // Update conversations state with new messages
       setConversations(prev => {
         const updatedConversations = [...prev];
-        const conversationIndex = updatedConversations.findIndex(c => c.id === selectedConversationId);
         
-        if (conversationIndex === -1) {
-          const tempConvId = `temp-${Date.now()}`;
+        if (!selectedConversationId) {
+          // No conversation selected - create a new one
           updatedConversations.unshift({
             id: tempConvId,
             title: inputMessage.slice(0, 50) + (inputMessage.length > 50 ? '...' : ''),
             messages: [newUserMessage, newAssistantMessage],
           });
-        } else {
+          
+          // Set the new conversation as selected
+          setTimeout(() => setSelectedConversationId(tempConvId), 0);
+          
+          return updatedConversations;
+        }
+        
+        // Add messages to the selected conversation
+        const conversationIndex = updatedConversations.findIndex(c => c.id === selectedConversationId);
+        
+        if (conversationIndex !== -1) {
           updatedConversations[conversationIndex] = {
             ...updatedConversations[conversationIndex],
             messages: [...updatedConversations[conversationIndex].messages, newUserMessage, newAssistantMessage],
           };
         }
+        
         return updatedConversations;
       });
 
@@ -136,7 +165,7 @@ export default function ChatPage() {
         body: JSON.stringify({
           message: inputMessage,
           conversationId: selectedConversationId,
-          isAudio,
+          isAudio: isAudio === true,
           chatHistory: currentConversation?.messages.map((msg) => ({
             role: msg.role,
             content: msg.content,
@@ -146,7 +175,7 @@ export default function ChatPage() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to get response');
+        throw new Error(`Failed to get response: ${response.status}`);
       }
 
       if (!response.body) {
@@ -156,32 +185,198 @@ export default function ChatPage() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let streamedContent = '';
+      let incompleteChunk = '';
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n\n');
+        // Decode the current chunk
+        const currentChunk = decoder.decode(value, { stream: true });
+        
+        // Combine with any leftover incomplete data from previous iteration
+        const processText = incompleteChunk + currentChunk;
+        
+        // Split by SSE delimiter
+        const parts = processText.split('\n\n');
+        
+        // The last part might be incomplete, save it for the next iteration
+        incompleteChunk = parts.pop() || '';
+        
+        // Process all complete parts
+        for (const part of parts) {
+          // Process each line in this part
+          const lines = part.split('\n');
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue;
+            
+            const data = trimmedLine.slice(5).trim();
+            if (data === '[DONE]') {
+              // Stream is complete, update UI to reflect completion
+              setConversations(prev => {
+                const updatedConversations = [...prev];
+                const targetId = receivedConversationId || selectedConversationId || tempConvId;
+                const conversationIndex = updatedConversations.findIndex(c => c.id === targetId);
+                
+                if (conversationIndex !== -1) {
+                  const conversation = updatedConversations[conversationIndex];
+                  const lastMessage = conversation.messages[conversation.messages.length - 1];
+                  
+                  if (lastMessage && lastMessage.role === 'assistant') {
+                    lastMessage.isComplete = true;
+                  }
+                }
+                
+                return updatedConversations;
+              });
+              continue;
+            }
 
+            try {
+              const parsedData = JSON.parse(data);
+              
+              // Check for error data from server
+              if (parsedData.error) {
+                console.error('Server reported error:', parsedData.error, parsedData.message);
+                throw new Error(parsedData.message || 'Error in stream processing');
+              }
+              
+              // Log to help debug streaming issues
+              console.debug('Received chunk:', 
+                parsedData.content?.length > 20 
+                  ? `${parsedData.content.substring(0, 20)}...` 
+                  : parsedData.content,
+                parsedData.isFinal ? '(FINAL)' : ''
+              );
+              
+              // Handle final message with complete content if provided
+              if (parsedData.isFinal && parsedData.content) {
+                streamedContent = parsedData.content; // Replace with the complete content
+              }
+              else if (parsedData.content) {
+                streamedContent += parsedData.content;
+              }
+              
+              if (parsedData.conversationId) {
+                receivedConversationId = parsedData.conversationId;
+                setConversations(prev => {
+                  const updatedConversations = [...prev];
+                  
+                  // Update conversation ID if we have a temp one
+                  if (!selectedConversationId) {
+                    const tempIndex = updatedConversations.findIndex(c => c.id === tempConvId);
+                    
+                    if (tempIndex !== -1) {
+                      updatedConversations[tempIndex] = {
+                        ...updatedConversations[tempIndex],
+                        id: parsedData.conversationId,
+                      };
+                      
+                      // Update selected conversation ID
+                      setTimeout(() => setSelectedConversationId(parsedData.conversationId), 0);
+                    }
+                  }
+                  
+                  return updatedConversations;
+                });
+              }
+
+              if (parsedData.content || parsedData.isFinal) {
+                setConversations(prev => {
+                  const updatedConversations = [...prev];
+                  
+                  // Find the conversation to update
+                  const targetConversationId = receivedConversationId || selectedConversationId || tempConvId;
+                  const conversationIndex = updatedConversations.findIndex(c => 
+                    c.id === targetConversationId
+                  );
+                  
+                  if (conversationIndex !== -1) {
+                    const conversation = updatedConversations[conversationIndex];
+                    const lastMessage = conversation.messages[conversation.messages.length - 1];
+                    
+                    if (lastMessage && lastMessage.role === 'assistant') {
+                      // Important: Create a new message object to trigger a re-render
+                      conversation.messages[conversation.messages.length - 1] = {
+                        ...lastMessage,
+                        content: streamedContent,
+                        isResponseToAudio: isAudio === true
+                      };
+                    }
+                  }
+                  
+                  return updatedConversations;
+                });
+              }
+            } catch (e) {
+              console.error('Error parsing SSE data:', e);
+            }
+          }
+        }
+      }
+
+      // Process any remaining data in the incompleteChunk
+      if (incompleteChunk.trim()) {
+        const lines = incompleteChunk.split('\n');
         for (const line of lines) {
           const trimmedLine = line.trim();
           if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue;
           
           const data = trimmedLine.slice(5).trim();
-          if (data === '[DONE]') continue;
+          if (data === '[DONE]') {
+            // Stream is complete, update UI to reflect completion
+            setConversations(prev => {
+              const updatedConversations = [...prev];
+              const targetId = receivedConversationId || selectedConversationId || tempConvId;
+              const conversationIndex = updatedConversations.findIndex(c => c.id === targetId);
+              
+              if (conversationIndex !== -1) {
+                const conversation = updatedConversations[conversationIndex];
+                const lastMessage = conversation.messages[conversation.messages.length - 1];
+                
+                if (lastMessage && lastMessage.role === 'assistant') {
+                  lastMessage.isComplete = true;
+                }
+              }
+              
+              return updatedConversations;
+            });
+            continue;
+          }
 
           try {
             const parsedData = JSON.parse(data);
             
-            if (parsedData.content) {
+            // Check for error data from server
+            if (parsedData.error) {
+              console.error('Server reported error:', parsedData.error, parsedData.message);
+              throw new Error(parsedData.message || 'Error in stream processing');
+            }
+            
+            // Log to help debug streaming issues
+            console.debug('Processing final chunk:', 
+              parsedData.content?.length > 20 
+                ? `${parsedData.content.substring(0, 20)}...` 
+                : parsedData.content,
+              parsedData.isFinal ? '(FINAL)' : ''
+            );
+            
+            // Handle final message with complete content if provided
+            if (parsedData.isFinal && parsedData.content) {
+              streamedContent = parsedData.content; // Replace with the complete content
+            }
+            else if (parsedData.content) {
               streamedContent += parsedData.content;
-
+            }
+            
+            if (parsedData.content || parsedData.isFinal) {
+              // Final update with the complete message
               setConversations(prev => {
                 const updatedConversations = [...prev];
+                const targetConversationId = receivedConversationId || selectedConversationId || tempConvId;
                 const conversationIndex = updatedConversations.findIndex(c => 
-                  c.id === parsedData.conversationId || 
-                  c.id.startsWith('temp-')
+                  c.id === targetConversationId
                 );
                 
                 if (conversationIndex !== -1) {
@@ -189,44 +384,33 @@ export default function ChatPage() {
                   const lastMessage = conversation.messages[conversation.messages.length - 1];
                   
                   if (lastMessage && lastMessage.role === 'assistant') {
-                    lastMessage.content = streamedContent;
-                    lastMessage.isResponseToAudio = isAudio === true;
+                    // Important: Create a new message object to trigger a re-render
+                    conversation.messages[conversation.messages.length - 1] = {
+                      ...lastMessage,
+                      content: streamedContent,
+                      isResponseToAudio: isAudio === true
+                    };
                   }
                 }
                 
                 return updatedConversations;
               });
             }
-            
-            if (parsedData.conversationId && !selectedConversationId) {
-              setConversations(prev => {
-                const updatedConversations = [...prev];
-                const tempIndex = updatedConversations.findIndex(c => c.id.startsWith('temp-'));
-                
-                if (tempIndex !== -1) {
-                  updatedConversations[tempIndex] = {
-                    ...updatedConversations[tempIndex],
-                    id: parsedData.conversationId,
-                  };
-                }
-                
-                return updatedConversations;
-              });
-              
-              setSelectedConversationId(parsedData.conversationId);
-            }
           } catch (e) {
-            console.error('Error parsing SSE data:', e);
+            console.error('Error parsing final SSE data:', e);
           }
         }
       }
-
-      // After streaming is complete, mark the message as complete
+    } catch (error) {
+      console.error('Chat error:', error);
+      
+      // Handle the error state by showing an error message
       setConversations(prev => {
         const updatedConversations = [...prev];
+        
+        // Find our conversation
         const conversationIndex = updatedConversations.findIndex(c => 
-          c.id === selectedConversationId || 
-          (selectedConversationId === null && c.id.startsWith('temp-'))
+          c.id === selectedConversationId || (!selectedConversationId && c.id.startsWith('temp-'))
         );
         
         if (conversationIndex !== -1) {
@@ -234,14 +418,13 @@ export default function ChatPage() {
           const lastMessage = conversation.messages[conversation.messages.length - 1];
           
           if (lastMessage && lastMessage.role === 'assistant') {
+            lastMessage.content = "Sorry, there was an error processing your request. Please try again.";
             lastMessage.isComplete = true;
           }
         }
         
         return updatedConversations;
       });
-    } catch (error) {
-      console.error('Chat error:', error);
     } finally {
       setIsLoading(false);
       setInputMessage('');
@@ -251,6 +434,15 @@ export default function ChatPage() {
   const currentConversation = selectedConversationId
     ? conversations.find((c) => c.id === selectedConversationId)
     : null;
+
+  // Show loading state while checking authentication
+  if (status === 'loading') {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="text-xl text-gray-500">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-gray-50">

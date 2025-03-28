@@ -21,8 +21,8 @@ export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
-      return new NextResponse(
-        JSON.stringify({ error: 'Unauthorized' }),
+      return NextResponse.json(
+        { error: 'Unauthorized' },
         { status: 401 }
       );
     }
@@ -30,8 +30,8 @@ export async function POST(request: Request) {
     const { message, chatHistory, conversationId, isAudio } = await request.json();
 
     if (!message) {
-      return new NextResponse(
-        JSON.stringify({ error: 'Message is required' }),
+      return NextResponse.json(
+        { error: 'Message is required' },
         { status: 400 }
       );
     }
@@ -45,8 +45,8 @@ export async function POST(request: Request) {
       });
 
       if (!conversation || conversation.user.email !== session.user.email) {
-        return new NextResponse(
-          JSON.stringify({ error: 'Unauthorized' }),
+        return NextResponse.json(
+          { error: 'Unauthorized' },
           { status: 401 }
         );
       }
@@ -56,8 +56,8 @@ export async function POST(request: Request) {
       });
 
       if (!user) {
-        return new NextResponse(
-          JSON.stringify({ error: 'User not found' }),
+        return NextResponse.json(
+          { error: 'User not found' },
           { status: 404 }
         );
       }
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
         content: '',
         role: 'assistant',
         conversationId: conversation.id,
-        isResponseToAudio: true,
+        isResponseToAudio: isAudio || false,
       },
     });
 
@@ -128,19 +128,34 @@ export async function POST(request: Request) {
               const eventData = {
                 content: content,
                 conversationId: conversation.id,
-                isResponseToAudio: true,
+                isResponseToAudio: isAudio || false,
+                timestamp: Date.now() // Add timestamp to ensure unique events
               };
+              
+              // Ensure proper SSE formatting with data: prefix and double newline
               const event = `data: ${JSON.stringify(eventData)}\n\n`;
               controller.enqueue(textEncoder.encode(event));
+              
+              // Add a small delay to ensure chunks are processed separately
+              await new Promise(resolve => setTimeout(resolve, 5));
             }
           }
 
+          // Send a final event with the complete response to ensure client has the full text
+          const finalEventData = {
+            content: fullAssistantResponse,
+            conversationId: conversation.id,
+            isResponseToAudio: isAudio || false,
+            isFinal: true
+          };
+          controller.enqueue(textEncoder.encode(`data: ${JSON.stringify(finalEventData)}\n\n`));
+          
           // Update the assistant message with the complete response
           await prisma.message.update({
             where: { id: assistantMessage.id },
             data: { 
               content: fullAssistantResponse,
-              isResponseToAudio: true,
+              isResponseToAudio: isAudio || false,
             },
           });
 
@@ -156,12 +171,20 @@ export async function POST(request: Request) {
             });
           }
 
-          // Send [DONE] event
+          // Send final event with a proper DONE marker
+          // Ensure proper SSE formatting with data: prefix and double newline
           controller.enqueue(textEncoder.encode('data: [DONE]\n\n'));
           controller.close();
         } catch (error) {
           console.error('Stream error:', error);
-          controller.error(error);
+          // Send error information to client
+          const errorData = {
+            error: 'Error while streaming response',
+            message: error instanceof Error ? error.message : 'Unknown error'
+          };
+          controller.enqueue(textEncoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
+          controller.enqueue(textEncoder.encode('data: [DONE]\n\n'));
+          controller.close();
         }
       },
     });
@@ -169,16 +192,16 @@ export async function POST(request: Request) {
     return new NextResponse(readableStream, {
       headers: {
         'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no' // Prevents buffering for Nginx proxy
       },
     });
   } catch (error) {
     console.error('Chat API error:', error);
-    return new NextResponse(
-      JSON.stringify({ error: 'Failed to get response' }),
-      { status: 500 }
-    );
+    const errorResponse = { error: 'Failed to get response' };
+    const options = { status: 500 };
+    return NextResponse.json(errorResponse, options);
   } finally {
     await prisma.$disconnect();
   }

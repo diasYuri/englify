@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.id) {
+    if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -40,9 +40,8 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Text-to-speech API error:', error);
-    return NextResponse.json(
-      { error: 'Failed to convert text to speech' },
-      { status: 500 }
-    );
+    const errorResponse = { error: 'Failed to convert text to speech' };
+    const options = { status: 500 };
+    return NextResponse.json(errorResponse, options);
   }
 } 
