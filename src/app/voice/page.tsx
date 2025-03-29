@@ -488,18 +488,44 @@ const VoicePageClient = () => {
         <h1 className="text-4xl font-bold text-center mb-8">Voice Assistant</h1>
         
         <div className="flex justify-center">
-          <Badge className="px-4 py-1.5 bg-transparent text-gray-800 border border-gray-200 flex items-center gap-2 font-normal">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500"></span>
-            Ready
+          <Badge className={`px-4 py-1.5 flex items-center gap-2 font-normal transition-colors ${
+            isConnected 
+              ? 'bg-green-100 text-green-800 border border-green-200' 
+              : isConnecting
+                ? 'bg-yellow-100 text-yellow-800 border border-yellow-200'
+                : 'bg-transparent text-gray-800 border border-gray-200'
+          }`}>
+            <span className={`inline-block w-2 h-2 rounded-full ${
+              isConnected 
+                ? 'bg-green-500 animate-pulse'
+                : isConnecting
+                  ? 'bg-yellow-500'
+                  : 'bg-gray-400'
+            }`}></span>
+            {isConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'Ready'}
           </Badge>
         </div>
       </div>
       
       <div className="flex flex-col items-center justify-center my-10">
-        <IconRobot size={48} className="text-primary-300" />
+        <div className={`w-24 h-24 mb-6 transition-opacity flex items-center justify-center ${isConnected ? 'opacity-100' : 'opacity-50'}`}>
+          <IconRobot size={64} className={`${isConnected ? 'text-blue-500' : 'text-gray-400'} ${isTalking ? 'animate-bounce' : ''}`} />
+        </div>
         
-        <h2 className="text-2xl font-semibold text-center mb-2">Voice Assistant Ready</h2>
-        <p className="text-center text-gray-600 mb-8">Start speaking by clicking the microphone button below.</p>
+        <h2 className="text-2xl font-semibold text-center mb-2">
+          {isConnected 
+            ? 'Voice Chat Active' 
+            : isConnecting 
+              ? 'Connecting...' 
+              : 'Voice Assistant Ready'}
+        </h2>
+        <p className="text-center text-gray-600 mb-8">
+          {isConnected 
+            ? 'Speak now or click the button to disconnect'
+            : isConnecting
+              ? 'Please wait while we establish your connection...'
+              : 'Start speaking by clicking the microphone button below.'}
+        </p>
         
         {errorMessage && (
           <div className="mb-6 p-3 bg-red-50 text-red-700 rounded-lg text-sm w-full max-w-md">
@@ -518,53 +544,67 @@ const VoicePageClient = () => {
         <button
           onClick={isConnected ? disconnectWebRTC : connectWebRTC}
           disabled={isConnecting}
-          className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${
+          className={`relative w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg transform ${
             isConnected 
-              ? 'bg-blue-500 hover:bg-blue-600' 
+              ? 'bg-red-500 hover:bg-red-600 hover:scale-105' 
               : isConnecting 
                 ? 'bg-gray-300 cursor-not-allowed' 
-                : 'bg-blue-500 hover:bg-blue-600'
+                : 'bg-blue-500 hover:bg-blue-600 hover:scale-105 hover:rotate-3'
           }`}
+          aria-label={isConnected ? "Disconnect" : "Connect"}
         >
-          <MicrophoneIcon className="h-10 w-10 text-white" />
+          {isConnected ? (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-white" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          ) : (
+            <MicrophoneIcon className="h-10 w-10 text-white" />
+          )}
+          
+          {/* Animated rings for different states */}
+          {isConnected && !isTalking && (
+            <div className="absolute inset-0 rounded-full border-4 border-red-300 animate-pulse" />
+          )}
           {isTalking && (
-            <div className="absolute inset-0 rounded-full border-4 border-blue-300 animate-ping" />
+            <div className="absolute inset-0">
+              <div className="absolute inset-0 rounded-full border-4 border-blue-300 animate-ping opacity-75" />
+              <div className="absolute inset-0 rounded-full border-4 border-blue-400 animate-ping opacity-50" style={{ animationDelay: '0.5s' }} />
+              <div className="absolute inset-0 rounded-full border-4 border-blue-500 animate-ping opacity-25" style={{ animationDelay: '1s' }} />
+            </div>
           )}
         </button>
         
-        {isConnecting && (
-          <p className="text-center text-sm text-gray-500 mt-2">Connecting...</p>
-        )}
+        <p className="text-center text-sm mt-4 font-medium">
+          {isConnected ? (
+            <span className="text-red-600">Click to disconnect</span>
+          ) : isConnecting ? (
+            <span className="text-yellow-600">Establishing connection...</span>
+          ) : (
+            <span className="text-blue-600">Click to connect</span>
+          )}
+        </p>
       </div>
       
-      {/* Hidden conversation display that can be shown later */}
-      <div className="hidden">
-        <div className="w-full max-w-2xl bg-gray-50 rounded-lg p-4 shadow-inner h-96 overflow-y-auto">
-          <h3 className="text-sm font-medium mb-4 text-gray-700 border-b pb-2">Conversation</h3>
-          {messages.length === 0 ? (
-            <div className="flex flex-col space-y-3 p-4">
-              <Skeleton className="h-10 w-3/4 rounded-lg" />
-              <Skeleton className="h-10 w-full rounded-lg" />
-              <Skeleton className="h-10 w-5/6 rounded-lg" />
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {messages.map((message, index) => (
-                <div 
-                  key={index} 
-                  className={`p-3 rounded-lg text-sm shadow-sm ${
-                    message.role === 'user' 
-                      ? 'bg-blue-100 ml-auto max-w-[80%] text-blue-900' 
-                      : 'bg-white mr-auto max-w-[80%] text-gray-800 border border-gray-100'
-                  }`}
-                >
-                  {message.content}
-                </div>
-              ))}
-            </div>
-          )}
+      {/* Only show conversation history when connected */}
+      {isConnected && messages.length > 0 && (
+        <div className="w-full max-w-2xl bg-white rounded-lg p-4 shadow-md mb-12 border border-gray-100">
+          <h3 className="text-sm font-medium mb-4 text-gray-700 border-b pb-2">Conversation History</h3>
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {messages.map((message, index) => (
+              <div 
+                key={index} 
+                className={`p-3 rounded-lg text-sm shadow-sm ${
+                  message.role === 'user' 
+                    ? 'bg-blue-100 ml-auto max-w-[80%] text-blue-900' 
+                    : 'bg-gray-100 mr-auto max-w-[80%] text-gray-800'
+                }`}
+              >
+                {message.content}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
