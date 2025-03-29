@@ -20,6 +20,7 @@ const VoicePageClient = () => {
   const [reconnectCount, setReconnectCount] = useState(0);
   const [lastResponseTime, setLastResponseTime] = useState<number | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [manualDisconnect, setManualDisconnect] = useState(false);
   
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
@@ -32,6 +33,7 @@ const VoicePageClient = () => {
       setIsConnecting(true);
       setErrorMessage(null);
       setSessionId(null);
+      setManualDisconnect(false);
       
       // Clear any existing reconnect timer
       if (reconnectTimerRef.current) {
@@ -133,7 +135,8 @@ const VoicePageClient = () => {
         setIsConnected(false);
         
         // Try to reconnect automatically if we haven't exceeded reconnect attempts
-        if (reconnectCount < 3) {
+        // and this wasn't a manual disconnect
+        if (reconnectCount < 3 && !manualDisconnect) {
           const delay = Math.min(1000 * (reconnectCount + 1), 5000); // Exponential backoff
           console.log(`Scheduling reconnect in ${delay}ms (attempt ${reconnectCount + 1})`);
           
@@ -199,6 +202,9 @@ const VoicePageClient = () => {
   };
   
   const disconnectWebRTC = () => {
+    // Set manual disconnect flag to prevent auto-reconnection
+    setManualDisconnect(true);
+    
     // Clear any reconnect timer
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
@@ -443,6 +449,9 @@ const VoicePageClient = () => {
   // Reset connection if no response for 60 seconds
   useEffect(() => {
     const checkConnectionHealth = () => {
+      // Don't attempt reconnection if it was a manual disconnect
+      if (manualDisconnect) return;
+      
       if (isConnected && lastResponseTime) {
         const now = Date.now();
         const elapsedTime = now - lastResponseTime;
@@ -452,6 +461,9 @@ const VoicePageClient = () => {
         if (elapsedTime > 60000) {
           console.log('Connection appears stale, reconnecting...');
           disconnectWebRTC();
+          
+          // Don't set manualDisconnect here since this is an automatic disconnection
+          setManualDisconnect(false);
           
           setTimeout(() => {
             if (!isConnected) {
@@ -467,7 +479,7 @@ const VoicePageClient = () => {
     return () => {
       clearInterval(interval);
     };
-  }, [isConnected, lastResponseTime]);
+  }, [isConnected, lastResponseTime, manualDisconnect]);
 
   return (
     <div className="container mx-auto py-6 space-y-6">
