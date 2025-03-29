@@ -482,93 +482,98 @@ const VoicePageClient = () => {
   }, [isConnected, lastResponseTime, manualDisconnect]);
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <CardTitle>Voice Conversation</CardTitle>
-            <div className="flex items-center space-x-2">
-              {isConnected ? (
-                <Badge variant="success" className="bg-green-500">
-                  Connected
-                </Badge>
-              ) : isConnecting ? (
-                <Badge variant="outline" className="bg-yellow-500 text-white">
-                  Connecting...
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="bg-gray-300">
-                  Disconnected
-                </Badge>
-              )}
-            </div>
+    <div className="container max-w-4xl mx-auto py-10 px-4">
+      <Card className="bg-white shadow-md border-0">
+        <CardHeader className="border-b pb-4">
+          <div className="flex justify-center items-center">
+            <CardTitle className="text-2xl font-semibold text-center text-gray-800">Voice Assistant</CardTitle>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6 flex flex-col items-center">
           {errorMessage && (
-            <div className="mb-4 p-3 bg-red-100 text-red-800 rounded-md text-sm">
+            <div className="mb-6 p-3 bg-red-50 text-red-700 rounded-lg text-sm w-full max-w-md">
               Error: {errorMessage}
             </div>
           )}
-          <div className="flex flex-col space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex flex-col h-64 bg-gray-50 rounded-md p-4 overflow-y-auto">
-                <h3 className="text-sm font-medium mb-2">Conversation</h3>
-                {messages.length === 0 ? (
-                  <div className="flex flex-col space-y-2">
-                    <Skeleton className="h-8 w-full" />
-                    <Skeleton className="h-8 w-3/4" />
-                    <Skeleton className="h-8 w-5/6" />
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {messages.map((message, index) => (
-                      <div 
-                        key={index} 
-                        className={`p-2 rounded-md text-sm ${
-                          message.role === 'user' 
-                            ? 'bg-blue-100 ml-auto max-w-[80%]' 
-                            : 'bg-gray-100 mr-auto max-w-[80%]'
-                        }`}
-                      >
-                        {message.content}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+          
+          {/* Central voice control */}
+          <div className="flex flex-col items-center mb-8">
+            <button
+              onClick={isConnected ? disconnectWebRTC : connectWebRTC}
+              disabled={isConnecting}
+              className={`relative w-24 h-24 rounded-full flex items-center justify-center mb-4 transition-all duration-300 ${
+                isConnected 
+                  ? 'bg-blue-500 hover:bg-blue-600 shadow-lg' 
+                  : isConnecting 
+                    ? 'bg-gray-300 cursor-not-allowed' 
+                    : 'bg-blue-400 hover:bg-blue-500'
+              }`}
+            >
+              <MicrophoneIcon className="h-12 w-12 text-white" />
+              {isTalking && (
+                <div className="absolute inset-0 rounded-full border-4 border-blue-300 animate-ping" />
+              )}
+            </button>
+            
+            <div className="flex items-center justify-center space-x-2">
+              <Badge 
+                className={`px-3 py-1 text-sm font-medium ${
+                  isConnected 
+                    ? 'bg-green-500 text-white' 
+                    : isConnecting 
+                      ? 'bg-yellow-500 text-white' 
+                      : 'bg-gray-200 text-gray-700'
+                }`}
+              >
+                {isConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
+              </Badge>
               
-              <div className="flex flex-col space-y-4">
-                <div className="flex flex-col">
-                  <h3 className="text-sm font-medium mb-2">Status</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="flex items-center space-x-2 p-2 bg-gray-50 rounded-md">
-                      <MicrophoneIcon className="h-5 w-5 text-gray-500" />
-                      <span className="text-sm">{currentTranscript || 'Waiting for speech...'}</span>
-                    </div>
-                    <div className="flex items-center space-x-2 p-2 bg-gray-50 rounded-md">
-                      <SpeakerWaveIcon className={`h-5 w-5 ${isTalking ? 'text-green-500' : 'text-gray-500'}`} />
-                      <span className="text-sm">{isTalking ? 'AI speaking...' : 'AI idle'}</span>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-xs text-gray-500">
-                    Connection: {connectionStatus}
-                    {sessionId && <span className="ml-2">Session: {sessionId.substring(0, 8)}...</span>}
-                  </div>
-                </div>
-                
-                <div className="flex flex-col">
-                  <h3 className="text-sm font-medium mb-2">Controls</h3>
-                  <VoiceControls 
-                    isConnected={isConnected}
-                    isConnecting={isConnecting}
-                    isTalking={isTalking}
-                    onConnect={connectWebRTC}
-                    onDisconnect={disconnectWebRTC}
-                  />
-                </div>
-              </div>
+              {isTalking && (
+                <Badge className="bg-blue-100 text-blue-700 px-3 py-1 text-sm font-medium">
+                  <SpeakerWaveIcon className="h-4 w-4 mr-1 inline" /> 
+                  Speaking
+                </Badge>
+              )}
             </div>
+            
+            {currentTranscript && (
+              <div className="mt-4 p-3 bg-blue-50 text-blue-800 rounded-lg text-sm max-w-md animate-pulse">
+                {currentTranscript}
+              </div>
+            )}
+          </div>
+          
+          {/* Conversation history */}
+          <div className="w-full max-w-2xl bg-gray-50 rounded-lg p-4 shadow-inner h-96 overflow-y-auto">
+            <h3 className="text-sm font-medium mb-4 text-gray-700 border-b pb-2">Conversation</h3>
+            {messages.length === 0 ? (
+              <div className="flex flex-col space-y-3 p-4">
+                <Skeleton className="h-10 w-3/4 rounded-lg" />
+                <Skeleton className="h-10 w-full rounded-lg" />
+                <Skeleton className="h-10 w-5/6 rounded-lg" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {messages.map((message, index) => (
+                  <div 
+                    key={index} 
+                    className={`p-3 rounded-lg text-sm shadow-sm ${
+                      message.role === 'user' 
+                        ? 'bg-blue-100 ml-auto max-w-[80%] text-blue-900' 
+                        : 'bg-white mr-auto max-w-[80%] text-gray-800 border border-gray-100'
+                    }`}
+                  >
+                    {message.content}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          {/* Status footer */}
+          <div className="w-full mt-4 text-xs text-gray-500 flex justify-between items-center">
+            <span>Status: {connectionStatus}</span>
+            {sessionId && <span>Session ID: {sessionId.substring(0, 8)}...</span>}
           </div>
         </CardContent>
       </Card>
