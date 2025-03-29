@@ -240,8 +240,8 @@ export function VoiceClient() {
     setIsTalking(false);
     setConnectionStatus('disconnected');
     setSessionId(null);
+    setMessages([]);
 
-    console.log(messages)
   };
 
   const sendSystemMessage = () => {
@@ -262,7 +262,7 @@ export function VoiceClient() {
           content: [
                 {
                     type: "input_text",
-                    text: 'You are a helpful AI assistant named Englify. Respond briefly and conversationally to help users practice English. Keep responses under 2-3 sentences when possible.'
+                    text: 'Respond in english and use portuguese when necessary to explain the something.'
                 }
             ]
         }
@@ -298,10 +298,23 @@ export function VoiceClient() {
       type: 'session.update',
       session: {
         modalities: ["text", "audio"],
-        instructions: "You are a helpful AI assistant named Englify. Respond briefly and conversationally to help users practice English. Keep responses under 2-3 sentences when possible.",
+        instructions: "You are a helpful AI assistant named Englify. Respond briefly and conversationally to help users practice English.",
         voice: 'verse',
         temperature: 0.7,
-        max_response_output_tokens: "inf"
+        max_response_output_tokens: "inf",
+        input_audio_transcription: {
+            model: "gpt-4o-mini-transcribe"
+        },
+        input_audio_noise_reduction: {
+            type: "far_field",
+        }
+        /*turn_detection: {
+            type: "server_vad",
+            threshold: 0.5,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 500,
+            create_response: true
+        },*/
       }
     }
 
@@ -312,7 +325,6 @@ export function VoiceClient() {
   const handleEvent = (event: RealtimeEvent) => {
     // Update last response time for connection health checks
     setLastResponseTime(Date.now());
-    
     try {
       console.log('Processing event:', event);
       
@@ -322,8 +334,8 @@ export function VoiceClient() {
           if (event.session?.id) {
             setSessionId(event.session.id);
             // Wait until we have a session ID before sending system message
-            setTimeout(() => sendSystemMessage(), 1000);
-            setTimeout(() => sendUpdateSession(), 1000);
+            setTimeout(() => sendUpdateSession(), 50);
+            setTimeout(() => sendSystemMessage(), 150);
           }
           break;
           
@@ -359,6 +371,24 @@ export function VoiceClient() {
           }
           break;
           
+        case 'conversation.item.input_audio_transcription.completed':
+          console.warn(event.transcript);      
+         
+          setMessages(prev => [...prev, { 
+            role: 'user', 
+            content: event.transcript || 'ok'
+          }]);
+
+          break;
+
+        case 'response.audio_transcript.done':
+          console.warn(event.transcript);
+          setMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: event.transcript || 'ok'
+          }]);
+          break;
+          
         case 'speech_started':
           setIsTalking(true);
           break;
@@ -369,12 +399,12 @@ export function VoiceClient() {
           
         case 'transcript':
           if (event.transcript) {
-            setCurrentTranscript(event.transcript.text);
-            if (event.transcript.is_final) {
+            setCurrentTranscript(event.transcript);
+            if (event.transcript) {
               // First add to UI
               setMessages(prev => [...prev, { 
                 role: 'user', 
-                content: event.transcript?.text || ''
+                content: event.transcript || ''
               }]);
               setCurrentTranscript('');
               
@@ -386,7 +416,7 @@ export function VoiceClient() {
                     type: 'conversation.item.create',
                     item: {
                       role: 'user',
-                      content: event.transcript.text || ''
+                      content: event.transcript || ''
                     }
                   };
                   

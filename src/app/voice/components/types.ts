@@ -1,9 +1,5 @@
 // Types for voice components
 
-export interface TranscriptEvent {
-  text: string;
-  is_final: boolean;
-}
 
 export interface MessageEvent {
   role: string;
@@ -21,7 +17,7 @@ export interface SessionEvent {
 export type RealtimeEvent = {
   type: string;
   event_id?: string;
-  transcript?: TranscriptEvent;
+  transcript?: string;
   message?: MessageEvent;
   error?: {
     type: string;
