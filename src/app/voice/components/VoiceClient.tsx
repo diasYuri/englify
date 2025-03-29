@@ -240,11 +240,13 @@ export function VoiceClient() {
     setIsTalking(false);
     setConnectionStatus('disconnected');
     setSessionId(null);
+
+    console.log(messages)
   };
 
   const sendSystemMessage = () => {
     console.log('Preparing to send system message', !dataChannelRef.current, dataChannelRef.current?.readyState, sessionId);
-    if (!dataChannelRef.current || dataChannelRef.current.readyState !== 'open' || !!!sessionId) {
+    if (!dataChannelRef.current || dataChannelRef.current.readyState !== 'open') {
       console.warn('Cannot send system message - channel not ready or no session ID');
       return;
     }
@@ -254,8 +256,15 @@ export function VoiceClient() {
       const systemMsg = {
         type: 'conversation.item.create',
         item: {
+          id: 'msg_001',
+          type: 'message',
           role: 'system',
-          content: 'You are a helpful AI assistant named Englify. Respond briefly and conversationally to help users practice English. Keep responses under 2-3 sentences when possible.'
+          content: [
+                {
+                    type: "input_text",
+                    text: 'You are a helpful AI assistant named Englify. Respond briefly and conversationally to help users practice English. Keep responses under 2-3 sentences when possible.'
+                }
+            ]
         }
       };
       
@@ -278,6 +287,27 @@ export function VoiceClient() {
       console.error('Error sending system message:', error);
     }
   };
+
+  const sendUpdateSession = () => {
+    if (!dataChannelRef.current || dataChannelRef.current.readyState !== 'open') {
+      console.warn('Cannot send update session - channel not ready or no session ID');
+      return;
+    }
+
+    const updateSession = {
+      type: 'session.update',
+      session: {
+        modalities: ["text", "audio"],
+        instructions: "You are a helpful AI assistant named Englify. Respond briefly and conversationally to help users practice English. Keep responses under 2-3 sentences when possible.",
+        voice: 'verse',
+        temperature: 0.7,
+        max_response_output_tokens: "inf"
+      }
+    }
+
+    console.log('Sending update session:', updateSession);
+    dataChannelRef.current.send(JSON.stringify(updateSession));
+  }
   
   const handleEvent = (event: RealtimeEvent) => {
     // Update last response time for connection health checks
@@ -292,7 +322,8 @@ export function VoiceClient() {
           if (event.session?.id) {
             setSessionId(event.session.id);
             // Wait until we have a session ID before sending system message
-            sendSystemMessage();
+            setTimeout(() => sendSystemMessage(), 1000);
+            setTimeout(() => sendUpdateSession(), 1000);
           }
           break;
           
