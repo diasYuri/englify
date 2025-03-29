@@ -7,6 +7,7 @@ import { MicrophoneIcon, SpeakerWaveIcon } from '@heroicons/react/24/solid';
 import VoiceControls from '@/components/voice/VoiceControls';
 import { Skeleton } from '@/components/ui/skeleton';
 import dynamic from 'next/dynamic';
+import { IconRobot } from '@tabler/icons-react';
 
 // Use dynamic import with no SSR for the main component that uses browser APIs
 const VoicePageClient = () => {
@@ -482,101 +483,88 @@ const VoicePageClient = () => {
   }, [isConnected, lastResponseTime, manualDisconnect]);
 
   return (
-    <div className="container max-w-4xl mx-auto py-10 px-4">
-      <Card className="bg-white shadow-md border-0">
-        <CardHeader className="border-b pb-4">
-          <div className="flex justify-center items-center">
-            <CardTitle className="text-2xl font-semibold text-center text-gray-800">Voice Assistant</CardTitle>
+    <div className="container mx-auto py-10 min-h-screen flex flex-col items-center justify-between bg-gray-50">
+      <div className="w-full max-w-lg">
+        <h1 className="text-4xl font-bold text-center mb-8">Voice Assistant</h1>
+        
+        <div className="flex justify-center">
+          <Badge className="px-4 py-1.5 bg-transparent text-gray-800 border border-gray-200 flex items-center gap-2 font-normal">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500"></span>
+            Ready
+          </Badge>
+        </div>
+      </div>
+      
+      <div className="flex flex-col items-center justify-center my-10">
+        <IconRobot size={48} className="text-primary-300" />
+        
+        <h2 className="text-2xl font-semibold text-center mb-2">Voice Assistant Ready</h2>
+        <p className="text-center text-gray-600 mb-8">Start speaking by clicking the microphone button below.</p>
+        
+        {errorMessage && (
+          <div className="mb-6 p-3 bg-red-50 text-red-700 rounded-lg text-sm w-full max-w-md">
+            Error: {errorMessage}
           </div>
-        </CardHeader>
-        <CardContent className="pt-6 flex flex-col items-center">
-          {errorMessage && (
-            <div className="mb-6 p-3 bg-red-50 text-red-700 rounded-lg text-sm w-full max-w-md">
-              Error: {errorMessage}
+        )}
+          
+        {currentTranscript && (
+          <div className="mt-4 p-3 bg-blue-50 text-blue-800 rounded-lg text-sm max-w-md animate-pulse">
+            {currentTranscript}
+          </div>
+        )}
+      </div>
+      
+      <div className="mb-20">
+        <button
+          onClick={isConnected ? disconnectWebRTC : connectWebRTC}
+          disabled={isConnecting}
+          className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${
+            isConnected 
+              ? 'bg-blue-500 hover:bg-blue-600' 
+              : isConnecting 
+                ? 'bg-gray-300 cursor-not-allowed' 
+                : 'bg-blue-500 hover:bg-blue-600'
+          }`}
+        >
+          <MicrophoneIcon className="h-10 w-10 text-white" />
+          {isTalking && (
+            <div className="absolute inset-0 rounded-full border-4 border-blue-300 animate-ping" />
+          )}
+        </button>
+        
+        {isConnecting && (
+          <p className="text-center text-sm text-gray-500 mt-2">Connecting...</p>
+        )}
+      </div>
+      
+      {/* Hidden conversation display that can be shown later */}
+      <div className="hidden">
+        <div className="w-full max-w-2xl bg-gray-50 rounded-lg p-4 shadow-inner h-96 overflow-y-auto">
+          <h3 className="text-sm font-medium mb-4 text-gray-700 border-b pb-2">Conversation</h3>
+          {messages.length === 0 ? (
+            <div className="flex flex-col space-y-3 p-4">
+              <Skeleton className="h-10 w-3/4 rounded-lg" />
+              <Skeleton className="h-10 w-full rounded-lg" />
+              <Skeleton className="h-10 w-5/6 rounded-lg" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {messages.map((message, index) => (
+                <div 
+                  key={index} 
+                  className={`p-3 rounded-lg text-sm shadow-sm ${
+                    message.role === 'user' 
+                      ? 'bg-blue-100 ml-auto max-w-[80%] text-blue-900' 
+                      : 'bg-white mr-auto max-w-[80%] text-gray-800 border border-gray-100'
+                  }`}
+                >
+                  {message.content}
+                </div>
+              ))}
             </div>
           )}
-          
-          {/* Central voice control */}
-          <div className="flex flex-col items-center mb-8">
-            <button
-              onClick={isConnected ? disconnectWebRTC : connectWebRTC}
-              disabled={isConnecting}
-              className={`relative w-24 h-24 rounded-full flex items-center justify-center mb-4 transition-all duration-300 ${
-                isConnected 
-                  ? 'bg-blue-500 hover:bg-blue-600 shadow-lg' 
-                  : isConnecting 
-                    ? 'bg-gray-300 cursor-not-allowed' 
-                    : 'bg-blue-400 hover:bg-blue-500'
-              }`}
-            >
-              <MicrophoneIcon className="h-12 w-12 text-white" />
-              {isTalking && (
-                <div className="absolute inset-0 rounded-full border-4 border-blue-300 animate-ping" />
-              )}
-            </button>
-            
-            <div className="flex items-center justify-center space-x-2">
-              <Badge 
-                className={`px-3 py-1 text-sm font-medium ${
-                  isConnected 
-                    ? 'bg-green-500 text-white' 
-                    : isConnecting 
-                      ? 'bg-yellow-500 text-white' 
-                      : 'bg-gray-200 text-gray-700'
-                }`}
-              >
-                {isConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
-              </Badge>
-              
-              {isTalking && (
-                <Badge className="bg-blue-100 text-blue-700 px-3 py-1 text-sm font-medium">
-                  <SpeakerWaveIcon className="h-4 w-4 mr-1 inline" /> 
-                  Speaking
-                </Badge>
-              )}
-            </div>
-            
-            {currentTranscript && (
-              <div className="mt-4 p-3 bg-blue-50 text-blue-800 rounded-lg text-sm max-w-md animate-pulse">
-                {currentTranscript}
-              </div>
-            )}
-          </div>
-          
-          {/* Conversation history */}
-          <div className="w-full max-w-2xl bg-gray-50 rounded-lg p-4 shadow-inner h-96 overflow-y-auto">
-            <h3 className="text-sm font-medium mb-4 text-gray-700 border-b pb-2">Conversation</h3>
-            {messages.length === 0 ? (
-              <div className="flex flex-col space-y-3 p-4">
-                <Skeleton className="h-10 w-3/4 rounded-lg" />
-                <Skeleton className="h-10 w-full rounded-lg" />
-                <Skeleton className="h-10 w-5/6 rounded-lg" />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {messages.map((message, index) => (
-                  <div 
-                    key={index} 
-                    className={`p-3 rounded-lg text-sm shadow-sm ${
-                      message.role === 'user' 
-                        ? 'bg-blue-100 ml-auto max-w-[80%] text-blue-900' 
-                        : 'bg-white mr-auto max-w-[80%] text-gray-800 border border-gray-100'
-                    }`}
-                  >
-                    {message.content}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          
-          {/* Status footer */}
-          <div className="w-full mt-4 text-xs text-gray-500 flex justify-between items-center">
-            <span>Status: {connectionStatus}</span>
-            {sessionId && <span>Session ID: {sessionId.substring(0, 8)}...</span>}
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 };
