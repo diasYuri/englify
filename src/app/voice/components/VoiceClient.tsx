@@ -244,7 +244,7 @@ export function VoiceClient() {
 
   const sendSystemMessage = () => {
     console.log('Preparing to send system message', !dataChannelRef.current, dataChannelRef.current?.readyState, sessionId);
-    if (!dataChannelRef.current || dataChannelRef.current.readyState !== 'open' || !sessionId) {
+    if (!dataChannelRef.current || dataChannelRef.current.readyState !== 'open' || !!!sessionId) {
       console.warn('Cannot send system message - channel not ready or no session ID');
       return;
     }
@@ -252,7 +252,7 @@ export function VoiceClient() {
     try {
       // Send initial message with correct format
       const systemMsg = {
-        type: 'session.update',
+        type: 'conversation.item.create',
         item: {
           role: 'system',
           content: 'You are a helpful AI assistant named Englify. Respond briefly and conversationally to help users practice English. Keep responses under 2-3 sentences when possible.'
@@ -265,7 +265,7 @@ export function VoiceClient() {
      
 
       // Request a response after a delay
-      /*setTimeout(() => {
+      setTimeout(() => {
         if (dataChannelRef.current?.readyState === 'open') {
           const generateResponse = {
             type: 'response.create'
@@ -273,7 +273,7 @@ export function VoiceClient() {
           console.log('Requesting initial response:', generateResponse);
           dataChannelRef.current.send(JSON.stringify(generateResponse));
         }
-      }, 500);*/
+      }, 500);
     } catch (error) {
       console.error('Error sending system message:', error);
     }
