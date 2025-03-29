@@ -540,7 +540,7 @@ const VoicePageClient = () => {
         )}
       </div>
       
-      <div className="mb-20">
+      <div className="mb-20 flex flex-col items-center">
         <button
           onClick={isConnected ? disconnectWebRTC : connectWebRTC}
           disabled={isConnecting}
@@ -574,15 +574,21 @@ const VoicePageClient = () => {
           )}
         </button>
         
-        <p className="text-center text-sm mt-4 font-medium">
-          {isConnected ? (
-            <span className="text-red-600">Click to disconnect</span>
-          ) : isConnecting ? (
-            <span className="text-yellow-600">Establishing connection...</span>
-          ) : (
-            <span className="text-blue-600">Click to connect</span>
-          )}
-        </p>
+        <div className="h-8 mt-4 flex items-center justify-center">
+          <span className={`text-sm font-medium transition-all duration-300 ${
+            isConnected 
+              ? 'text-red-600' 
+              : isConnecting 
+                ? 'text-yellow-600'
+                : 'text-blue-600'
+          }`}>
+            {isConnected 
+              ? 'Click to disconnect' 
+              : isConnecting 
+                ? 'Establishing connection...' 
+                : 'Click to connect'}
+          </span>
+        </div>
       </div>
       
       {/* Only show conversation history when connected */}
