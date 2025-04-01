@@ -24,6 +24,7 @@ export function VoiceClient() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [manualDisconnect, setManualDisconnect] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<string>('disconnected');
   
   // Refs
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -38,7 +39,6 @@ export function VoiceClient() {
       setIsConnecting(true);
       setErrorMessage(null);
       setSessionId(null);
-      setManualDisconnect(false);
       
       // Clear any existing reconnect timer
       if (reconnectTimerRef.current) {
@@ -81,14 +81,17 @@ export function VoiceClient() {
       // Connection state logging
       pc.oniceconnectionstatechange = () => {
         console.log('ICE connection state:', pc.iceConnectionState);
+        setConnectionStatus(`ice:${pc.iceConnectionState}`);
       };
       
       pc.onconnectionstatechange = () => {
         console.log('Connection state:', pc.connectionState);
+        setConnectionStatus(`ice:${pc.iceConnectionState}`);
         
         if (pc.connectionState === 'connected') {
           setIsConnected(true);
           setIsConnecting(false);
+          setManualDisconnect(false);
         } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
           setIsConnected(false);
         }
@@ -131,7 +134,6 @@ export function VoiceClient() {
         setIsConnecting(false);
         setReconnectCount(0); // Reset reconnect count on successful connection
         setLastResponseTime(Date.now());
-        // Clear manual disconnect flag when connection is established
         setManualDisconnect(false);
       };
       
