@@ -1,9 +1,11 @@
 'use client';
 
+import { memo } from 'react';
 import { IconRobot } from '@tabler/icons-react';
 import { VoiceRobotProps } from './types';
 
-export function VoiceRobot({ isConnected, isConnecting, isTalking }: VoiceRobotProps) {
+// Memoize the component
+export const VoiceRobot = memo(function VoiceRobot({ isConnected, isConnecting, isTalking }: VoiceRobotProps) {
   return (
     <div className="flex flex-col items-center">
       <div className={`w-24 h-24 mb-6 transition-opacity flex items-center justify-center ${isConnected ? 'opacity-100' : 'opacity-50'}`}>
@@ -29,4 +31,4 @@ export function VoiceRobot({ isConnected, isConnecting, isTalking }: VoiceRobotP
       </p>
     </div>
   );
-} 
+}); 

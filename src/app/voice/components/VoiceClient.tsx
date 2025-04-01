@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { VoiceStatus } from './VoiceStatus';
 import { VoiceRobot } from './VoiceRobot';
 import { VoiceMicButton } from './VoiceMicButton';
@@ -8,6 +8,8 @@ import { ConversationHistory } from './ConversationHistory';
 import { ErrorMessage } from './ErrorMessage';
 import { TranscriptDisplay } from './TranscriptDisplay';
 import { RealtimeEvent, ChatMessage } from './types';
+import { HistoryPopupButton } from './HistoryPopupButton';
+import { ConversationSidebar } from './ConversationSidebar';
 
 export function VoiceClient() {
   // State variables
@@ -17,11 +19,11 @@ export function VoiceClient() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentTranscript, setCurrentTranscript] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<string>('disconnected');
   const [reconnectCount, setReconnectCount] = useState(0);
   const [lastResponseTime, setLastResponseTime] = useState<number | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [manualDisconnect, setManualDisconnect] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   // Refs
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -30,7 +32,8 @@ export function VoiceClient() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const connectWebRTC = async () => {
+  // Memoize connectWebRTC
+  const connectWebRTC = useCallback(async () => {
     try {
       setIsConnecting(true);
       setErrorMessage(null);
@@ -78,12 +81,10 @@ export function VoiceClient() {
       // Connection state logging
       pc.oniceconnectionstatechange = () => {
         console.log('ICE connection state:', pc.iceConnectionState);
-        setConnectionStatus(`ice:${pc.iceConnectionState}`);
       };
       
       pc.onconnectionstatechange = () => {
         console.log('Connection state:', pc.connectionState);
-        setConnectionStatus(`conn:${pc.connectionState}`);
         
         if (pc.connectionState === 'connected') {
           setIsConnected(true);
@@ -130,6 +131,8 @@ export function VoiceClient() {
         setIsConnecting(false);
         setReconnectCount(0); // Reset reconnect count on successful connection
         setLastResponseTime(Date.now());
+        // Clear manual disconnect flag when connection is established
+        setManualDisconnect(false);
       };
       
       dc.onclose = () => {
@@ -143,7 +146,7 @@ export function VoiceClient() {
           console.log(`Scheduling reconnect in ${delay}ms (attempt ${reconnectCount + 1})`);
           
           reconnectTimerRef.current = setTimeout(() => {
-            if (!isConnected) {
+            if (!isConnected && !manualDisconnect) { // Check manualDisconnect again at reconnect time
               console.log(`Attempting reconnect #${reconnectCount + 1}`);
               setReconnectCount(prev => prev + 1);
               connectWebRTC();
@@ -201,9 +204,10 @@ export function VoiceClient() {
       setIsConnecting(false);
       disconnectWebRTC();
     }
-  };
+  }, []);
   
-  const disconnectWebRTC = () => {
+  // Memoize disconnectWebRTC
+  const disconnectWebRTC = useCallback(() => {
     // Set manual disconnect flag to prevent auto-reconnection
     setManualDisconnect(true);
     
@@ -238,13 +242,13 @@ export function VoiceClient() {
     
     setIsConnected(false);
     setIsTalking(false);
-    setConnectionStatus('disconnected');
     setSessionId(null);
     setMessages([]);
 
-  };
+  }, []);
 
-  const sendSystemMessage = () => {
+  // Memoize sendSystemMessage
+  const sendSystemMessage = useCallback(() => {
     console.log('Preparing to send system message', !dataChannelRef.current, dataChannelRef.current?.readyState, sessionId);
     if (!dataChannelRef.current || dataChannelRef.current.readyState !== 'open') {
       console.warn('Cannot send system message - channel not ready or no session ID');
@@ -286,9 +290,10 @@ export function VoiceClient() {
     } catch (error) {
       console.error('Error sending system message:', error);
     }
-  };
+  }, [sessionId]);
 
-  const sendUpdateSession = () => {
+  // Memoize sendUpdateSession
+  const sendUpdateSession = useCallback(() => {
     if (!dataChannelRef.current || dataChannelRef.current.readyState !== 'open') {
       console.warn('Cannot send update session - channel not ready or no session ID');
       return;
@@ -320,7 +325,7 @@ export function VoiceClient() {
 
     console.log('Sending update session:', updateSession);
     dataChannelRef.current.send(JSON.stringify(updateSession));
-  }
+  }, []);
   
   const handleEvent = (event: RealtimeEvent) => {
     // Update last response time for connection health checks
@@ -456,13 +461,16 @@ export function VoiceClient() {
   
   // Cleanup on unmount
   useEffect(() => {
+    // Use the memoized disconnectWebRTC function in cleanup
+    const cleanup = disconnectWebRTC;
     return () => {
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
       }
-      disconnectWebRTC();
+      cleanup();
     };
-  }, []);
+    // Pass the memoized function as dependency if ESLint complains, but usually okay for cleanup
+  }, [disconnectWebRTC]);
 
   // Reset connection if no response for 60 seconds
   useEffect(() => {
@@ -478,13 +486,32 @@ export function VoiceClient() {
         // reset the connection
         if (elapsedTime > 60000) {
           console.log('Connection appears stale, reconnecting...');
-          disconnectWebRTC();
+          // Call disconnect without setting manual disconnect flag
+          if (dataChannelRef.current) {
+            dataChannelRef.current.close();
+            dataChannelRef.current = null;
+          }
           
-          // Don't set manualDisconnect here since this is an automatic disconnection
-          setManualDisconnect(false);
+          if (peerConnectionRef.current) {
+            peerConnectionRef.current.close();
+            peerConnectionRef.current = null;
+          }
           
-          setTimeout(() => {
-            if (!isConnected) {
+          if (mediaStreamRef.current) {
+            mediaStreamRef.current.getTracks().forEach(track => track.stop());
+            mediaStreamRef.current = null;
+          }
+          
+          setIsConnected(false);
+          
+          // Clear any existing reconnect timer before setting a new one
+          if (reconnectTimerRef.current) {
+            clearTimeout(reconnectTimerRef.current);
+          }
+          
+          reconnectTimerRef.current = setTimeout(() => {
+            // Only reconnect if still not connected and not manually disconnected
+            if (!isConnected && !manualDisconnect) {
               connectWebRTC();
             }
           }, 1000);
@@ -497,7 +524,17 @@ export function VoiceClient() {
     return () => {
       clearInterval(interval);
     };
-  }, [isConnected, lastResponseTime, manualDisconnect]);
+  }, [isConnected, lastResponseTime, manualDisconnect, connectWebRTC, disconnectWebRTC]);
+
+  // Memoize toggleSidebar
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarOpen(prev => !prev);
+  }, []);
+  
+  // Memoize sidebar close function
+  const closeSidebar = useCallback(() => {
+    setIsSidebarOpen(false);
+  }, []);
 
   return (
     <div className="container mx-auto py-10 min-h-screen flex flex-col items-center justify-between bg-gray-50">
@@ -530,6 +567,18 @@ export function VoiceClient() {
       <ConversationHistory 
         messages={messages} 
         isVisible={isConnected && messages.length > 0} 
+      />
+      
+      <HistoryPopupButton 
+        hasMessages={messages.length > 0}
+        onClick={toggleSidebar}
+        isTalking={isTalking} 
+      />
+      
+      <ConversationSidebar 
+        messages={messages}
+        isOpen={isSidebarOpen}
+        onClose={closeSidebar}
       />
     </div>
   );

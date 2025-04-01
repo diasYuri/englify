@@ -1,10 +1,13 @@
 'use client';
 
+import { memo } from 'react';
+
 interface TranscriptDisplayProps {
   text: string;
 }
 
-export function TranscriptDisplay({ text }: TranscriptDisplayProps) {
+// Memoize the component
+export const TranscriptDisplay = memo(function TranscriptDisplay({ text }: TranscriptDisplayProps) {
   if (!text) return null;
   
   return (
@@ -12,4 +15,4 @@ export function TranscriptDisplay({ text }: TranscriptDisplayProps) {
       {text}
     </div>
   );
-} 
+}); 

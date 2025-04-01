@@ -1,8 +1,10 @@
 'use client';
 
+import { memo } from 'react';
 import { ErrorMessageProps } from './types';
 
-export function ErrorMessage({ message }: ErrorMessageProps) {
+// Memoize the component
+export const ErrorMessage = memo(function ErrorMessage({ message }: ErrorMessageProps) {
   if (!message) return null;
   
   return (
@@ -10,4 +12,4 @@ export function ErrorMessage({ message }: ErrorMessageProps) {
       Error: {message}
     </div>
   );
-} 
+}); 

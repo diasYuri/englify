@@ -1,9 +1,11 @@
 'use client';
 
+import { memo } from 'react';
 import { MicrophoneIcon } from '@heroicons/react/24/solid';
 import { VoiceMicButtonProps } from './types';
 
-export function VoiceMicButton({ 
+// Memoize the component
+export const VoiceMicButton = memo(function VoiceMicButton({ 
   isConnected, 
   isConnecting, 
   isTalking, 
@@ -62,4 +64,4 @@ export function VoiceMicButton({
       </div>
     </div>
   );
-} 
+}); 

@@ -1,9 +1,11 @@
 'use client';
 
+import { memo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { VoiceStatusProps } from './types';
 
-export function VoiceStatus({ isConnected, isConnecting }: VoiceStatusProps) {
+// Memoize the component
+export const VoiceStatus = memo(function VoiceStatus({ isConnected, isConnecting }: VoiceStatusProps) {
   return (
     <div className="flex justify-center">
       <Badge 
@@ -28,4 +30,4 @@ export function VoiceStatus({ isConnected, isConnecting }: VoiceStatusProps) {
       </Badge>
     </div>
   );
-} 
+}); 
