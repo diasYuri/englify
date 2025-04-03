@@ -24,7 +24,6 @@ export function VoiceClient() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [manualDisconnect, setManualDisconnect] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<string>('disconnected');
   
   // Refs
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -36,6 +35,7 @@ export function VoiceClient() {
   // Memoize connectWebRTC
   const connectWebRTC = useCallback(async () => {
     try {
+      console.log('Connecting to WebRTC');
       setIsConnecting(true);
       setErrorMessage(null);
       setSessionId(null);
@@ -81,17 +81,14 @@ export function VoiceClient() {
       // Connection state logging
       pc.oniceconnectionstatechange = () => {
         console.log('ICE connection state:', pc.iceConnectionState);
-        setConnectionStatus(`ice:${pc.iceConnectionState}`);
       };
       
       pc.onconnectionstatechange = () => {
         console.log('Connection state:', pc.connectionState);
-        setConnectionStatus(`ice:${pc.iceConnectionState}`);
         
         if (pc.connectionState === 'connected') {
           setIsConnected(true);
           setIsConnecting(false);
-          setManualDisconnect(false);
         } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
           setIsConnected(false);
         }
@@ -138,7 +135,7 @@ export function VoiceClient() {
       };
       
       dc.onclose = () => {
-        console.log('Data channel closed');
+        console.log('Data channel closed', manualDisconnect);
         setIsConnected(false);
         
         // Try to reconnect automatically if we haven't exceeded reconnect attempts
@@ -206,11 +203,12 @@ export function VoiceClient() {
       setIsConnecting(false);
       disconnectWebRTC();
     }
-  }, []);
+  }, [manualDisconnect]);
   
   // Memoize disconnectWebRTC
   const disconnectWebRTC = useCallback(() => {
     // Set manual disconnect flag to prevent auto-reconnection
+    console.log('Disconnecting WebRTC');
     setManualDisconnect(true);
     
     // Clear any reconnect timer

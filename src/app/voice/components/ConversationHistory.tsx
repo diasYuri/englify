@@ -5,20 +5,28 @@ import { FixedSizeList as List } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import { ConversationHistoryProps, ChatMessage } from './types';
 
-// Altura fixa para cada linha da mensagem - reduzida para diminuir espaçamento
-const ROW_HEIGHT = 50;
+// Altura fixa para cada linha da mensagem - aumentada substancialmente
+const ROW_HEIGHT = 80;
 
 // Componente de linha individual para cada mensagem
 const MessageRow = ({ index, style, data }: { index: number, style: React.CSSProperties, data: ChatMessage[] }) => {
   const message = data[index];
   const isFromUser = message.role === 'user';
   
-  // Modificamos para ter estilos diferentes baseados na origem da mensagem
+  // Aplicamos espaçamento diretamente no style para sobrescrever qualquer valor padrão
+  const updatedStyle = {
+    ...style,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: isFromUser ? 'flex-end' : 'flex-start',
+    paddingTop: 12,
+    paddingBottom: 12,
+    paddingLeft: 12,
+    paddingRight: 12
+  };
+  
   return (
-    <div 
-      style={style} 
-      className={`px-3 py-0 flex items-center ${isFromUser ? 'justify-end' : 'justify-start'}`}
-    >
+    <div style={updatedStyle}>
       <div 
         className={`rounded-lg text-sm shadow-sm p-3 max-w-[80%] ${
           isFromUser 
@@ -49,6 +57,7 @@ export const ConversationHistory = memo(function ConversationHistory({ messages,
               width={width}
               itemData={messages}
               className="overflow-y-auto"
+              overscanCount={1}
             >
               {MessageRow}
             </List>
